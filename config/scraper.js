@@ -26,7 +26,9 @@ export const scrapeGoogle = async (query, contentType = "articles") => {
   let result = null;
 
   if (contentType === "articles") {
-    url = `https://www.google.com/search?q=${encodeURIComponent(query)}&tbm=nws`;
+    url = `https://www.google.com/search?q=${encodeURIComponent(
+      query
+    )}&tbm=nws`;
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: 0 });
 
     // Scroll to load content
@@ -59,7 +61,9 @@ export const scrapeGoogle = async (query, contentType = "articles") => {
   }
 
   if (contentType === "images") {
-    url = `https://www.google.com/search?tbm=isch&q=${encodeURIComponent(query)}`;
+    url = `https://www.google.com/search?tbm=isch&q=${encodeURIComponent(
+      query
+    )}`;
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: 0 });
 
     for (let i = 0; i < 3; i++) {
@@ -80,7 +84,9 @@ export const scrapeGoogle = async (query, contentType = "articles") => {
   }
 
   if (contentType === "videos") {
-    url = `https://www.google.com/search?q=${encodeURIComponent(query)}&tbm=vid`;
+    url = `https://www.google.com/search?q=${encodeURIComponent(
+      query
+    )}&tbm=vid`;
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: 0 });
 
     for (let i = 0; i < 2; i++) {
@@ -104,9 +110,7 @@ export const scrapeGoogle = async (query, contentType = "articles") => {
   return result;
 };
 
-
 export const scrapeGoogleNewsRSS = async (query, contentType = "articles") => {
-  // ARTICLES via RSS (most reliable)
   if (contentType === "articles") {
     try {
       const rssUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(
@@ -120,7 +124,8 @@ export const scrapeGoogleNewsRSS = async (query, contentType = "articles") => {
       const result = await parser.parseStringPromise(xml);
 
       const items = result.rss.channel[0].item;
-      if (!items || items.length === 0) throw new Error("No news results found");
+      if (!items || items.length === 0)
+        throw new Error("No news results found");
 
       const firstItem = items[0];
       return {
@@ -137,11 +142,10 @@ export const scrapeGoogleNewsRSS = async (query, contentType = "articles") => {
 
   // IMAGES or VIDEOS via Puppeteer
   const browser = await puppeteer.launch({
-    headless: false, // true for production
+    headless: false,
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
   });
   const page = await browser.newPage();
-
   await page.setUserAgent(
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36"
   );
@@ -149,54 +153,56 @@ export const scrapeGoogleNewsRSS = async (query, contentType = "articles") => {
   await page.setExtraHTTPHeaders({ "accept-language": "en-US,en;q=0.9" });
 
   const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
   let result = null;
   let url;
-
   if (contentType === "images") {
-    url = `https://www.google.com/search?tbm=isch&q=${encodeURIComponent(query)}`;
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 0 });
+    url = `https://duckduckgo.com/?q=${encodeURIComponent(
+      query
+    )}&iax=images&ia=images`;
+    await page.goto(url, { waitUntil: "networkidle2", timeout: 0 });
 
-    for (let i = 0; i < 3; i++) {
-      await page.evaluate(() => window.scrollBy(0, window.innerHeight));
-      await wait(1000);
-    }
+    await page.waitForSelector("img", { timeout: 10000 });
 
-    const imgElement = await page.$("img");
-    if (imgElement) {
-      const src = await page.evaluate(
-        (img) => img.src || img.getAttribute("data-src"),
-        imgElement
-      );
-      result = { image: src };
-    } else {
-      throw new Error("No images found");
-    }
+    const result = await page.evaluate(() => {
+      const imgs = Array.from(document.querySelectorAll("img"));
+      for (let img of imgs) {
+        const src = img.src || img.getAttribute("data-src");
+        const about = img.alt || "Image related to the search topic"; // ✅ descriptive text
+        if (src && src.startsWith("http") && !src.includes("base64")) {
+          return { about, image: src };
+        }
+      }
+      return null;
+    });
+
+    if (!result) throw new Error("No images found");
+    await browser.close();
+    return result;
   }
 
   if (contentType === "videos") {
-    url = `https://www.google.com/search?q=${encodeURIComponent(query)}&tbm=vid`;
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 0 });
+    url = `https://www.youtube.com/results?search_query=${encodeURIComponent(
+      query
+    )}`;
+    await page.goto(url, { waitUntil: "networkidle2" });
 
-    for (let i = 0; i < 2; i++) {
-      await page.evaluate(() => window.scrollBy(0, window.innerHeight));
-      await wait(1000);
+    // Wait for first video thumbnail
+    await page.waitForSelector("ytd-video-renderer", { timeout: 10000 });
+
+    const videoElement = await page.$("ytd-video-renderer");
+    if (videoElement) {
+      result = await page.evaluate((el) => {
+        const title = el.querySelector("#video-title")?.innerText || "";
+        const link =
+          "https://www.youtube.com" +
+          (el.querySelector("#video-title")?.getAttribute("href") || "");
+        return { title, link };
+      }, videoElement);
+    } else {
+      throw new Error("No videos found");
     }
-
-    const videoElement = await page.$('div[jscontroller="AtSb"]'); 
-if (videoElement) {
-  result = await page.evaluate((el) => {
-    const aTag = el.querySelector('a');
-    const title = aTag?.innerText || '';
-    const link = aTag?.href || '';
-    return { title, link };
-  }, videoElement);
-} else {
-  throw new Error("No videos found");
-}
   }
 
   await browser.close();
   return result;
 };
-
