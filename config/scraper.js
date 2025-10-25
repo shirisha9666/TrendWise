@@ -207,120 +207,119 @@ export const scrapeGoogleNewsRSS = async (query, contentType = "articles") => {
   return result;
 };
 
-
-export const scrapeGoogleNewsRSSNew = async (contentType = "articles") => {
-  // STEP 1 — Get trending topics from Google Trends
-  const trendingTopics = await getTrendingTopics(); // returns ["Taylor Swift", "India vs Pakistan", ...]
-
+export const scrapeTrendingContent = async (contentType = "articles") => {
+  const trendingTopics = await getTrendingTopics();
   const results = [];
 
-  // STEP 2 — Loop through trending topics and scrape based on contentType
+  let browser = null;
+  if (contentType === "images" || contentType === "videos") {
+    browser = await puppeteer.launch({
+      headless: true,
+      args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    });
+  }
+
   for (const topic of trendingTopics) {
-    console.log(`🟢 Fetching ${contentType} for trending topic: ${topic}`);
+    console.log(`Fetching ${contentType} for: ${topic}`);
 
-    if (contentType === "articles") {
-      const rssUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(
-        topic
-      )}&hl=en-US&gl=US&ceid=US:en`;
-
-      try {
-        const response = await fetch(rssUrl);
-        const xml = await response.text();
-
-        const parser = new xml2js.Parser();
-        const result = await parser.parseStringPromise(xml);
-
-        const items = result.rss.channel[0].item;
-        if (!items || items.length === 0) continue;
-
-        const firstItem = items[0];
-        results.push({
-          topic,
-          title: firstItem.title[0],
-          link: firstItem.link[0],
-          snippet: firstItem.description[0],
-          pubDate: firstItem.pubDate[0],
-          source: firstItem["source"] ? firstItem["source"][0]._ : null,
-        });
-      } catch (err) {
-        console.error("Error fetching articles for", topic, err.message);
+    try {
+      if (contentType === "articles") {
+        const rssUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(
+          topic
+        )}&hl=en-US&gl=US&ceid=US:en`;
+        const xml = await (await fetch(rssUrl)).text();
+        const parsed = await new xml2js.Parser().parseStringPromise(xml);
+        const items = parsed.rss.channel[0].item;
+        if (items && items.length > 0) {
+          const firstItem = items[0];
+          results.push({
+            topic,
+            title: firstItem.title[0],
+            link: firstItem.link[0],
+            snippet: firstItem.description[0],
+            pubDate: firstItem.pubDate[0],
+            source: firstItem.source ? firstItem.source[0]._ : null,
+          });
+        }
       }
-    }
 
-    if (contentType === "images" || contentType === "videos") {
-      const browser = await puppeteer.launch({
-        headless: true,
-        args: ["--no-sandbox", "--disable-setuid-sandbox"],
-      });
-      const page = await browser.newPage();
-      await page.setUserAgent(
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36"
-      );
-      await page.setViewport({ width: 1366, height: 768 });
-      await page.setExtraHTTPHeaders({ "accept-language": "en-US,en;q=0.9" });
-
-      try {
-        if (contentType === "images") {
-          const url = `https://duckduckgo.com/?q=${encodeURIComponent(
+      if (contentType === "images") {
+        const page = await browser.newPage();
+        await page.goto(
+          `https://duckduckgo.com/?q=${encodeURIComponent(
             topic
-          )}&iax=images&ia=images`;
-          await page.goto(url, { waitUntil: "networkidle2", timeout: 0 });
-          await page.waitForSelector("img", { timeout: 10000 });
+          )}&iax=images&ia=images`,
+          { waitUntil: "networkidle2" }
+        );
+        await page.waitForSelector("img", { timeout: 10000 });
 
-          const imageResult = await page.evaluate(() => {
-            const imgs = Array.from(document.querySelectorAll("img"));
-            for (let img of imgs) {
-              const src = img.src || img.getAttribute("data-src");
-              const about = img.alt || "Image related to trending topic";
-              if (src && src.startsWith("http") && !src.includes("base64")) {
-                return { about, image: src };
-              }
+        const imgResult = await page.evaluate(() => {
+          const imgs = Array.from(document.querySelectorAll("img"));
+          for (let img of imgs) {
+            const src = img.src || img.getAttribute("data-src");
+            const title = img.alt || "Untitled image";
+            if (src && src.startsWith("http") && !src.includes("base64")) {
+              return { title, image: src };
             }
-            return null;
-          });
-
-          if (imageResult) results.push({ topic, ...imageResult });
-        }
-
-        if (contentType === "videos") {
-          const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(
-            topic
-          )}`;
-          await page.goto(url, { waitUntil: "networkidle2" });
-          await page.waitForSelector("ytd-video-renderer", { timeout: 10000 });
-
-          const videoResult = await page.evaluate(() => {
-            const el = document.querySelector("ytd-video-renderer");
-            if (!el) return null;
-            const title = el.querySelector("#video-title")?.innerText || "";
-            const link =
-              "https://www.youtube.com" +
-              (el.querySelector("#video-title")?.getAttribute("href") || "");
-            return { title, link };
-          });
-
-          if (videoResult) results.push({ topic, ...videoResult });
-        }
-      } catch (err) {
-        console.error("Error fetching media for", topic, err.message);
-      } finally {
-        await browser.close();
+          }
+          return null;
+        });
+        if (imgResult) results.push({ topic, ...imgResult });
+        await page.close();
       }
+
+      if (contentType === "videos") {
+        const page = await browser.newPage();
+        await page.goto(
+          `https://www.youtube.com/results?search_query=${encodeURIComponent(topic)}`,
+          { waitUntil: "networkidle2" }
+        );
+        await page.waitForSelector("ytd-video-renderer", { timeout: 10000 });
+
+        const vidResult = await page.evaluate(() => {
+          const el = document.querySelector("ytd-video-renderer");
+          if (!el) return null;
+          const title = el.querySelector("#video-title")?.innerText || "";
+          const link =
+            "https://www.youtube.com" +
+            (el.querySelector("#video-title")?.getAttribute("href") || "");
+          return { title, link };
+        });
+        if (vidResult) results.push({ topic, ...vidResult });
+        await page.close();
+      }
+    } catch (err) {
+      console.error("Error fetching content for", topic, err.message);
     }
   }
 
+  if (browser) await browser.close();
   return results;
 };
+
 async function getTrendingTopics() {
   try {
-    const data = await googleTrends.dailyTrends({ geo: "US" });
-    const parsed = JSON.parse(data);
-
-    return parsed.default.trendingSearchesDays[0].trendingSearches.map(
-      (t) => t.title.query
-    );
+    const trends = await googleTrends.realTimeTrends({ geo: "US", category: "all" });
+    return trends.storySummaries.trendingStories.slice(0, 10).map((s) => s.title);
   } catch (err) {
-    console.error("Error fetching Google trends:", err.message);
-    return ["Breaking News", "Latest Updates"]; // fallback topics
+    console.error("Error fetching trends:", err.message);
+    return ["Breaking News", "Latest Updates"];
   }
 }
+
+
+
+// async function getTrendingTopics() {
+//   try {
+//     // const data = await googleTrends.dailyTrends({ geo: "US" });
+//     const data = await googleTrends.dailyTrends({ geo: "US" });
+//     const parsed = JSON.parse(data);
+
+//     return parsed.default.trendingSearchesDays[0].trendingSearches.map(
+//       (t) => t.title.query
+//     );
+//   } catch (err) {
+//     console.error("Error fetching Google trends:", err.message);
+//     return ["Breaking News", "Latest Updates"]; // fallback topics
+//   }
+// }

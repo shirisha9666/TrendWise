@@ -104,3 +104,19 @@ export const googleLogin = async (req, res) => {
     return res.status(500).json({ message: error.message });
   }
 };
+
+
+export const getloginUser = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+   const data=await User.findById(id)
+   if(!data){
+    return res.status(400).json({message:"user not found"})
+   }
+   return res.status(200).json(data)
+  } catch (error) {
+    console.log("error in signup");
+    return res.status(500).json({ message: error.message });
+  }
+};

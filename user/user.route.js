@@ -1,5 +1,5 @@
 import express from "express"
-import { googleLogin, signup } from "./user.controller.js";
+import { getloginUser, googleLogin, signup } from "./user.controller.js";
 import { authorizeRoles, isAuthenticatedUser } from "../config/middlware.js";
 
 const router=express.Router()
@@ -11,6 +11,13 @@ router
   router
   .route("/google")
   .get(googleLogin);
+
+  
+  router
+  .route("/login/:id")
+  .get(getloginUser);
+
+
 
 
 export default router
