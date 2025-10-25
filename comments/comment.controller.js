@@ -66,12 +66,12 @@ export const UpdateComment=async(req,res)=>{
 export const userCommentHistroy=async(req,res)=>{
     try {
         const {id}=req.params //userId
-        const comment=await Comment.findById(id)
+        const comment=await Comment.findOne({userId:id})
         if(!comment){
             return res.status(404).json({message:"Comment not found"})
         }
-       let commentHistroy= await Comment.find({userId:id})
-        return res.status(200).json({message:"Comment Updated Succssfully",commentHistroy})
+       let commentHistroy= await Comment.find({userId:id}).populate("articleId").populate("userId")
+        return res.status(200).json({message:"Comment Fetchd Succssfully",commentHistroy})
     } catch (error) {
         return res.status(500).json({message:error.message})
     }

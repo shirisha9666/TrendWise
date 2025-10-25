@@ -5,7 +5,7 @@ const router=express.Router()
 
 router.post("/create/:id",createComment )
 router.put("/update/:id",UpdateComment)
-router.post("/comment/all/:id",userCommentHistroy)
+router.get("/all/:id",userCommentHistroy)
 router.delete("/delete/:id",deelteComment)
 router.post("/like/:id",likeArticle)
 
