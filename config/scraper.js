@@ -134,10 +134,23 @@ export const fetchVideosForTopic = async (topic, browser) => {
 
 async function getTrendingTopics() {
   try {
-    const results = await googleTrends.realTimeTrends({
-      geo: 'US',
-      category: 'all'
-    });
+    // const results = await googleTrends.realTimeTrends({
+    //   geo: 'US',
+    //   category: 'all'
+    // });
+    const results = await googleTrends.realTimeTrends(
+  {
+    geo: 'US',
+    category: 'all'
+  },
+  {
+    headers: {
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0 Safari/537.36'
+    }
+  }
+);
+
     const json = JSON.parse(results);
     return json.storySummaries.trendingStories.slice(0, 10).map(s => s.title);
   } catch (err) {
