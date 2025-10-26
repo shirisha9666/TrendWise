@@ -1,5 +1,5 @@
 import express from "express"
-import { getloginUser, googleLogin, signup } from "./user.controller.js";
+import { getloginUser, googleLogin, signup,createRole } from "./user.controller.js";
 import { authorizeRoles, isAuthenticatedUser } from "../config/middlware.js";
 
 const router=express.Router()
@@ -16,6 +16,10 @@ router
   router
   .route("/login/:id")
   .get(getloginUser);
+
+    router
+  .route("/role")
+  .put(createRole);
 
 
 

@@ -91,30 +91,53 @@ export const googleLogin = async (req, res) => {
     const { code } = req.query;
     const googleRes = await oauth2client.getToken(code);
     oauth2client.setCredentials(googleRes.tokens);
-    const userRes = await axios.get(`https://www.googleapis.com/oauth2/v1/userinfo?alt=json&access_token=${googleRes.tokens.access_token}`);
+    const userRes = await axios.get(
+      `https://www.googleapis.com/oauth2/v1/userinfo?alt=json&access_token=${googleRes.tokens.access_token}`
+    );
     const { name, email, picture } = userRes.data;
     let user = await User.findOne({ email });
     if (!user) {
-      user = await User.create({ name, email, avatar:picture });
+      user = await User.create({ name, email, avatar: picture });
     }
     sendToken(user, 200, res);
-    // return res.status(200).json({message:"Success",token,user})
   } catch (error) {
     console.log("error in googleLogin", error);
     return res.status(500).json({ message: error.message });
   }
 };
 
+export const createRole = async (req, res) => {
+  const { role, userId } = req.body;
+
+  try {
+    const findUser = await User.findById(userId);
+    if (!findUser) {
+      return res.status(400).json({ message: "user not found" });
+    }
+    const updateRole = await User.findByIdAndUpdate(
+      userId,
+      { role },
+      { new: true }
+    );
+
+    return res
+      .status(200)
+      .json({ message: "User Role Updated Successfully", updateRole });
+  } catch (error) {
+    console.log("error in signup");
+    return res.status(500).json({ message: error.message });
+  }
+};
 
 export const getloginUser = async (req, res) => {
   const { id } = req.params;
 
   try {
-   const data=await User.findById(id)
-   if(!data){
-    return res.status(400).json({message:"user not found"})
-   }
-   return res.status(200).json(data)
+    const data = await User.findById(id);
+    if (!data) {
+      return res.status(400).json({ message: "user not found" });
+    }
+    return res.status(200).json(data);
   } catch (error) {
     console.log("error in signup");
     return res.status(500).json({ message: error.message });
