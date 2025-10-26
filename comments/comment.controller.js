@@ -70,12 +70,13 @@ export const userCommentHistroy = async (req, res) => {
     if (!comment) {
       return res.status(404).json({ message: "Comment not found" });
     }
-    let commentHistroy = await Comment.find({ userId: id })
-      .populate("articleId")
-      .populate("userId");
+let commentHistory = await Comment.find({ userId: id })
+  .populate("articleId")
+  .populate("userId")
+  .sort({ createdAt: -1 }); // newest first
     return res
       .status(200)
-      .json({ message: "Comment Fetchd Succssfully", commentHistroy });
+      .json({ message: "Comment Fetchd Succssfully", commentHistory });
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }
