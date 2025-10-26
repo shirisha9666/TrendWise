@@ -134,31 +134,21 @@ export const fetchVideosForTopic = async (topic, browser) => {
 
 async function getTrendingTopics() {
   try {
-    // const results = await googleTrends.realTimeTrends({
-    //   geo: 'US',
-    //   category: 'all'
-    // });
-    const results = await googleTrends.realTimeTrends(
-  {
-    geo: 'US',
-    category: 'all'
-  },
-  {
-    headers: {
-      'User-Agent':
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0 Safari/537.36'
-    }
-  }
-);
+    const res = await fetch("https://trends.google.com/trends/trendingsearches/daily/rss?geo=US");
+    const xml = await res.text();
+    const parsed = await xml2js.parseStringPromise(xml);
 
-    const json = JSON.parse(results);
-    return json.storySummaries.trendingStories.slice(0, 10).map(s => s.title);
+    const items = parsed?.rss?.channel?.[0]?.item;
+    if (!Array.isArray(items)) {
+      throw new Error("Invalid RSS structure");
+    }
+
+    return items.slice(0, 10).map(i => i.title?.[0] || "Unknown Topic");
   } catch (err) {
-    console.error('Error fetching trends:', err.message);
-    return ['Breaking News', 'Latest Updates'];
+    console.error("Error fetching trends:", err.message);
+    return ["Breaking News", "Latest Updates"];
   }
 }
-
 
 // export const scrapeTrendingContent = async (contentType = "articles", limits = { articles: 5, images: 5, videos: 5 }) => {
 //   const trendingTopics = await getTrendingTopics();
