@@ -5,65 +5,56 @@ import {
 } from "../config/scraper.js";
 import { Article } from "./articles.model.js";
 import slugify from "slugify";
-
 export const createAticles = async (req, res) => {
-  const { contentType } = req.body;
-
   try {
-    let trendingResults = await scrapeTrendingContent(contentType);
+    const trendingResults = await scrapeTrendingContent();
+    console.log('Trending results:', trendingResults);
+
     const seoArticles = await generateSEOContentHUGGINGFACE(trendingResults);
+    console.log('SEO articles:', seoArticles);
+
     const savedArticles = [];
+for (const item of seoArticles) {
+  if (!item.originalTitle) continue;
 
-    for (const item of seoArticles) {
-      // ✅ define slug first
-      const slug = slugify(item.originalTitle, { lower: true, strict: true });
+  const slug = slugify(item.originalTitle, { lower: true, strict: true }) + '-' + Date.now();
 
-      // ✅ check if article with same slug already exists
-      const existing = await Article.findOne({ slug });
-      if (existing) {
-        console.log("⏩ Skipping duplicate article:", slug);
-        continue;
-      }
-
-      // ✅ create article only if not exists
-   const newArticle = new Article({
-  title: item.originalTitle,
-  slug,
-  meta: {
+  const newArticle = new Article({
     title: item.originalTitle,
-    description: item.topic,
-    keywords: item.topic.split(" "),
-    ogTitle: item.originalTitle,
-    ogDescription: item.topic,
-    ogImage: item.image || "https://example.com/default-image.jpg", // 🖼️ use scraped image
-  },
-  media: {
-    videos: [
-      {
-        title: item.topic,
-        url: item.link,
-        thumbnail: item.image || null, // 🖼️ optional
-      },
-    ],
-  },
-  content: item.content,
-  source: "auto",
-  createdByBot: true,
-});
-      const saved = await newArticle.save();
-      savedArticles.push(saved);
-    }
+    slug,
+    meta: {
+      title: item.originalTitle,
+      description: item.topic || '',
+      keywords: item.topic ? item.topic.split(' ') : [],
+      ogTitle: item.originalTitle,
+      ogDescription: item.topic || '',
+      ogImage: item.images.length ? item.images[0] : item.mainImage || null,
+    },
+    media: {
+      images: item.images && item.images.length ? item.images : item.mainImage ? [item.mainImage] : [],
+      videos: item.link ? [{ title: item.topic, url: item.link, thumbnail: item.mainImage }] : [],
+      articles: item.link ? [{ title: item.originalTitle, url: item.link, thumbnail: item.mainImage }] : [],
+    },
+    content: item.content,
+    source: 'auto',
+    createdByBot: true,
+  });
 
-    console.log("✅ Articles saved successfully:", savedArticles.length);
+  const saved = await newArticle.save();
+  savedArticles.push(saved);
+}
+
     return res.status(200).json({
-      message: "Articles saved successfully",
+      message: 'Articles saved successfully',
       savedCount: savedArticles,
     });
-  } catch (error) {
-    console.log("createAticles", error);
-    return res.status(500).json({ message: error.message });
+  } catch (err) {
+    console.error('createArticles error:', err);
+    return res.status(500).json({ message: err.message });
   }
 };
+
+
 
  const generateSlug = (text) => {
   // if (!text) text = "untitled";

@@ -94,15 +94,15 @@ export const generateSEOContentHUGGINGFACE = async (results) => {
 
   for (const item of results) {
     let prompt = item.link
-      ? `Write a SEO-friendly article based on this content:
+      ? `Write a SEO-friendly article:
 Title: "${item.title}"
 Topic: "${item.topic}"
 Link: "${item.link}"
-Thumbnail: "${item.mainImage || 'N/A'}"`
-      : `Write a descriptive caption or mini-article for this image:
+Thumbnail: "${item.mainImage}"`
+      : `Write a descriptive caption or mini-article:
 Title: "${item.title}"
 Topic: "${item.topic}"
-Thumbnail: "${item.mainImage || 'N/A'}"`;
+Thumbnail: "${item.mainImage}"`;
 
     try {
       const response = await fetch(huggingFaceModelEndpoint, {
@@ -111,23 +111,14 @@ Thumbnail: "${item.mainImage || 'N/A'}"`;
           Authorization: `Bearer ${HF_KEY}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          inputs: prompt,
-          options: { wait_for_model: true },
-        }),
+        body: JSON.stringify({ inputs: prompt, options: { wait_for_model: true } }),
       });
 
-      let content = "";
-      try {
-        const data = await response.json();
-        if (Array.isArray(data)) {
-          content = data[0]?.generated_text || data[0]?.summary_text || "";
-        } else {
-          content = data.generated_text || data.summary_text || "";
-        }
-      } catch (err) {
-        content = "Error: could not parse response from Hugging Face API";
-      }
+      const data = await response.json();
+      const content =
+        Array.isArray(data) && data[0]?.generated_text
+          ? data[0].generated_text
+          : data.generated_text || `SEO article for ${item.title}`;
 
       seoArticles.push({
         originalTitle: item.title,
@@ -137,11 +128,11 @@ Thumbnail: "${item.mainImage || 'N/A'}"`;
         mainImage: item.mainImage || null,
         images: item.images || [],
       });
-    } catch (error) {
-      console.error("Hugging Face API request failed:", error);
+    } catch (err) {
+      console.error("HuggingFace error:", err.message);
       seoArticles.push({
         originalTitle: item.title,
-        content: `Error: ${error.message}`,
+        content: `Error generating SEO content: ${err.message}`,
         topic: item.topic,
         link: item.link || null,
         mainImage: item.mainImage || null,

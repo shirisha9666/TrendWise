@@ -1,93 +1,241 @@
 import puppeteer from "puppeteer";
 import fetch from "node-fetch";
 import xml2js from "xml2js";
-import googleTrends from "google-trends-api"; // or your existing module
+import googleTrends from 'google-trends-api';
 
+// Scrape images from an article page
 
-async function getTrendingTopics() {
-  try {
-    const trends = await googleTrends.realTimeTrends({ geo: "US", category: "all" });
-    return trends.storySummaries.trendingStories.slice(0, 10).map((s) => s.title);
-  } catch (err) {
-    console.error("Error fetching trends:", err.message);
-    return ["Breaking News", "Latest Updates"];
-  }
-}
-export const scrapeTrendingContent = async (contentType = "articles") => {
-  const trendingTopics = await getTrendingTopics();
-  const results = [];
-  let browser = null;
-
-  if (contentType === "articles" || contentType === "images" || contentType === "videos") {
-    browser = await puppeteer.launch({
-      headless: true,
-      args: ["--no-sandbox", "--disable-setuid-sandbox"],
-    });
-  }
-
-  for (const topic of trendingTopics) {
-    try {
-      if (contentType === "articles") {
-        const rssUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(topic)}&hl=en-US&gl=US&ceid=US:en`;
-        const xml = await (await fetch(rssUrl)).text();
-        const parsed = await new xml2js.Parser().parseStringPromise(xml);
-        const items = parsed.rss.channel[0].item;
-
-        if (items && items.length > 0) {
-          const firstItem = items[0];
-          const link = firstItem.link[0];
-          const snippet = firstItem.description[0];
-
-          // --- scrape images from the article page
-          const { mainImage, images } = await fetchArticleImages(link, browser);
-
-          results.push({
-            topic,
-            title: firstItem.title[0],
-            link,
-            content: snippet,
-            mainImage,
-            images,
-            pubDate: firstItem.pubDate[0],
-            source: firstItem.source ? firstItem.source[0]._ : null,
-          });
-        }
-      }
-
-      // images/videos logic stays same...
-    } catch (err) {
-      console.error("Error fetching content for", topic, err.message);
-    }
-  }
-
-  if (browser) await browser.close();
-  return results;
-};
-
-// helper to scrape images from any page
-async function fetchArticleImages(url, browser) {
+export const fetchArticleMedia = async (url, browser) => {
   try {
     const page = await browser.newPage();
-    await page.goto(url, { waitUntil: "networkidle2" });
+    await page.goto(url, { waitUntil: "domcontentloaded" });
 
-    const mainImage = await page.evaluate(() => {
-      const og = document.querySelector('meta[property="og:image"]');
-      return og ? og.content : document.querySelector("img")?.src || null;
-    });
+    // Get main image (og:image)
+    const mainImage = await page.$eval(
+      'meta[property="og:image"]',
+      el => el.content,
+    ).catch(() => null);
 
-    const images = await page.evaluate(() =>
-      Array.from(document.querySelectorAll("img"))
-        .map((img) => img.src)
-        .filter((src) => src && src.startsWith("http"))
+    // Get all images from the page
+    const images = await page.$$eval('img', imgs =>
+      imgs.map(img => img.src).filter(src => src && src.startsWith('http'))
+    );
+
+    // Optionally get videos (YouTube, Vimeo, etc.)
+    const videos = await page.$$eval('video, iframe[src*="youtube"], iframe[src*="vimeo"]', v =>
+      v.map(el => ({
+        url: el.src || el.getAttribute('data-src'),
+        thumbnail: null
+      }))
     );
 
     await page.close();
-    return { mainImage, images };
+    return { mainImage, images, videos };
   } catch (err) {
-    console.error("Error fetching images from article:", err.message);
+    console.error("fetchArticleMedia error:", err.message);
+    return {
+      mainImage: null,
+      images: [],
+      videos: []
+    };
+  }
+};
+
+
+// 2️⃣ Scrape images for a topic (Google search fallback)
+
+export const fetchImagesForTopic = async (topic, browser) => {
+  try {
+    const page = await browser.newPage();
+    await page.goto(`https://www.google.com/search?tbm=isch&q=${encodeURIComponent(topic)}`, { waitUntil: 'domcontentloaded' });
+
+    const images = await page.$$eval('img', imgs =>
+      imgs.map(img => img.src).filter(src => src && src.startsWith('http'))
+    );
+
+    await page.close();
+
+    return {
+      mainImage: images[0] || null,
+      images
+    };
+  } catch (err) {
+    console.error("fetchImagesForTopic error:", err.message);
+    return { mainImage: null, images: [] };
+  }
+};
+
+
+
+async function getTrendingTopicsRSS() {
+  try {
+    const rssUrl = `https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en`;
+    const xml = await (await fetch(rssUrl)).text();
+    const parsed = await new xml2js.Parser().parseStringPromise(xml);
+    const items = parsed.rss.channel[0].item.slice(0, 10); // top 10
+    return items.map(item => ({
+      title: item.title[0],
+      link: item.link[0],
+      snippet: item.description[0],
+      pubDate: item.pubDate[0],
+      source: item.source ? item.source[0]._ : null,
+    }));
+  } catch (err) {
+    console.error('Error fetching RSS:', err.message);
+    return [];
+  }
+}
+
+
+async function fetchArticleImages(url, browser) {
+  if (!browser) return { mainImage: null, images: [] };
+  try {
+    const page = await browser.newPage();
+    await page.goto(url, { waitUntil: 'networkidle2' });
+    const images = await page.evaluate(() => {
+      const imgs = Array.from(document.querySelectorAll('img'));
+      return imgs
+        .map(img => img.src)
+        .filter(src => src && src.startsWith('http') && !src.includes('base64'));
+    });
+    await page.close();
+    return {
+      mainImage: images.length ? images[0] : null,
+      images,
+    };
+  } catch (err) {
+    console.error('Error scraping images:', err.message);
     return { mainImage: null, images: [] };
   }
 }
 
+export const fetchVideosForTopic = async (topic, browser) => {
+  try {
+    const page = await browser.newPage();
+    await page.goto(`https://www.youtube.com/results?search_query=${encodeURIComponent(topic)}`, { waitUntil: 'domcontentloaded' });
 
+    const videos = await page.$$eval('ytd-video-renderer a#video-title', links =>
+      links.slice(0, 5).map(link => ({
+        url: 'https://www.youtube.com' + link.getAttribute('href'),
+        thumbnail: null,
+      }))
+    );
+
+    await page.close();
+    return videos;
+  } catch (err) {
+    console.error("fetchVideosForTopic error:", err.message);
+    return [];
+  }
+};
+
+
+
+
+async function getTrendingTopics() {
+  try {
+    const results = await googleTrends.realTimeTrends({
+      geo: 'US',
+      category: 'all'
+    });
+    const json = JSON.parse(results);
+    return json.storySummaries.trendingStories.slice(0, 10).map(s => s.title);
+  } catch (err) {
+    console.error('Error fetching trends:', err.message);
+    return ['Breaking News', 'Latest Updates'];
+  }
+}
+
+
+export const scrapeTrendingContent = async (contentType = "articles", limits = { articles: 5, images: 5, videos: 5 }) => {
+  const trendingTopics = await getTrendingTopics();
+  const results = [];
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+  });
+
+  for (const topic of trendingTopics) {
+    try {
+      let mediaResults = [];
+
+      // Articles or all content
+      if (contentType === "articles" || contentType === "all") {
+        const rssUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(topic)}&hl=en-US&gl=US&ceid=US:en`;
+        const xml = await (await fetch(rssUrl)).text();
+        const parsed = await new xml2js.Parser().parseStringPromise(xml);
+        const items = (parsed.rss.channel[0].item || []).slice(0, limits.articles); // LIMIT HERE
+
+        for (const item of items) {
+          const link = item.link[0];
+          const snippet = item.description[0];
+
+          const { mainImage, images, videos } = await fetchArticleMedia(link, browser);
+
+          mediaResults.push({
+            topic,
+            title: item.title[0],
+            link,
+            content: snippet,
+            mainImage,
+            images,
+            videos,
+            pubDate: item.pubDate[0],
+            source: item.source ? item.source[0]._ : null,
+          });
+        }
+      }
+
+      // Images only or all
+      if (contentType === "images" || contentType === "all") {
+        const { mainImage, images } = await fetchImagesForTopic(topic, browser);
+        mediaResults.push({
+          topic,
+          title: topic,
+          link: null,
+          content: `Images for trending topic: ${topic}`,
+          mainImage,
+          images: images.slice(0, limits.images), // LIMIT HERE
+          videos: [],
+          pubDate: new Date().toISOString(),
+          source: "auto",
+        });
+      }
+
+      // Videos only or all
+      if (contentType === "videos" || contentType === "all") {
+        const videos = await fetchVideosForTopic(topic, browser);
+        mediaResults.push({
+          topic,
+          title: topic,
+          link: null,
+          content: `Videos for trending topic: ${topic}`,
+          mainImage: videos.length ? videos[0].thumbnail || null : null,
+          images: [],
+          videos: videos.slice(0, limits.videos), // LIMIT HERE
+          pubDate: new Date().toISOString(),
+          source: "auto",
+        });
+      }
+
+      results.push(...mediaResults);
+    } catch (err) {
+      console.error("Error scraping topic:", topic, err.message);
+      results.push({
+        topic,
+        title: topic,
+        link: null,
+        content: `Trending topic: ${topic}`,
+        mainImage: "https://example.com/default-image.jpg",
+        images: ["https://example.com/default-image.jpg"],
+        videos: [],
+        pubDate: new Date().toISOString(),
+        source: "auto",
+      });
+    }
+  }
+
+  await browser.close();
+  return results;
+};
 
