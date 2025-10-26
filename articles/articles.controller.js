@@ -1,11 +1,9 @@
 import { generateSEOContentHUGGINGFACE } from "../config/OpenAI.js";
 import {
-  scrapeGoogle,
-  scrapeGoogleNewsRSS,
+
   scrapeTrendingContent,
 } from "../config/scraper.js";
 import { Article } from "./articles.model.js";
-
 import slugify from "slugify";
 
 export const createAticles = async (req, res) => {
@@ -28,30 +26,30 @@ export const createAticles = async (req, res) => {
       }
 
       // ✅ create article only if not exists
-      const newArticle = new Article({
-        title: item.originalTitle,
-        slug,
-        meta: {
-          title: item.originalTitle,
-          description: item.topic,
-          keywords: item.topic.split(" "),
-          ogTitle: item.originalTitle,
-          ogDescription: item.topic,
-          ogImage: "https://example.com/default-image.jpg",
-        },
-        media: {
-          videos: [
-            {
-              title: item.topic,
-              url: item.link,
-            },
-          ],
-        },
-        content: item.content,
-        source: "auto",
-        createdByBot: true,
-      });
-
+   const newArticle = new Article({
+  title: item.originalTitle,
+  slug,
+  meta: {
+    title: item.originalTitle,
+    description: item.topic,
+    keywords: item.topic.split(" "),
+    ogTitle: item.originalTitle,
+    ogDescription: item.topic,
+    ogImage: item.image || "https://example.com/default-image.jpg", // 🖼️ use scraped image
+  },
+  media: {
+    videos: [
+      {
+        title: item.topic,
+        url: item.link,
+        thumbnail: item.image || null, // 🖼️ optional
+      },
+    ],
+  },
+  content: item.content,
+  source: "auto",
+  createdByBot: true,
+});
       const saved = await newArticle.save();
       savedArticles.push(saved);
     }
@@ -59,7 +57,7 @@ export const createAticles = async (req, res) => {
     console.log("✅ Articles saved successfully:", savedArticles.length);
     return res.status(200).json({
       message: "Articles saved successfully",
-      savedCount: savedArticles.length,
+      savedCount: savedArticles,
     });
   } catch (error) {
     console.log("createAticles", error);
@@ -67,51 +65,76 @@ export const createAticles = async (req, res) => {
   }
 };
 
-// export const UpdateAticles = async (req, res) => {
-//   const { id } = req.parmas; // article id
+ const generateSlug = (text) => {
+  // if (!text) text = "untitled";
+  let slug = text
+    .toString()
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/[^\w\-]+/g, "")
+    .replace(/\-\-+/g, "-");
+
+  return slug;
+};
+
+
+// export const createAticles = async (req, res) => {
 //   const { contentType } = req.body;
 
 //   try {
-//     let trendingResults = await scrapeTrendingContent(contentType);
+//     const trendingResults = await scrapeTrendingContent(contentType);
 //     const seoArticles = await generateSEOContentHUGGINGFACE(trendingResults);
 //     const savedArticles = [];
+
 //     for (const item of seoArticles) {
+//       let slug = generateSlug(item.originalTitle);
+//       let counter = 1;
+
+//       // Avoid duplicate slugs
+//       while (await Article.findOne({ slug })) {
+//         slug = `${generateSlug(item.originalTitle)}-${counter}`;
+//         counter++;
+//       }
+
 //       const newArticle = new Article({
 //         title: item.originalTitle,
-//         slug: slugify(item.originalTitle, { lower: true, strict: true }),
+//         slug,
 //         meta: {
 //           title: item.originalTitle,
 //           description: item.topic,
-//           keywords: item.topic.split(" "),
+//           keywords: item.topic ? item.topic.split(" ") : [],
 //           ogTitle: item.originalTitle,
 //           ogDescription: item.topic,
-//           ogImage: "https://example.com/default-image.jpg",
+//           ogImage: item.mainImage || "https://source.unsplash.com/600x400/?news",
 //         },
 //         media: {
-//           videos: [
-//             {
-//               title: item.topic,
-//               url: item.link,
-//             },
-//           ],
+//           images: item.images && item.images.length ? item.images : [],
+//           videos: [],
+//           articles: item.link
+//             ? [{ title: item.originalTitle, url: item.link, thumbnail: item.mainImage || (item.images[0] || null) }]
+//             : [],
 //         },
-//         content: item.content,
+//         content: item.content || "",
 //         source: "auto",
 //         createdByBot: true,
 //       });
 
-//       const saved = await Article.save();
+//       const saved = await newArticle.save();
 //       savedArticles.push(saved);
 //     }
 
-//     console.log("✅ Articles saved successfully:", savedArticles.length);
-//     return savedArticles;
-//     // return res.status(200).json(seoArticles)
+//     return res.status(200).json({
+//       message: "Articles saved successfully",
+//       savedCount: savedArticles,
+//     });
 //   } catch (error) {
-//     console.log("createAticles", error);
+//     console.error("createArticles", error);
 //     return res.status(500).json({ message: error.message });
 //   }
 // };
+
+
 
 export const updateArticles = async (req, res) => {
   const { id } = req.params; // ✅ fixed typo

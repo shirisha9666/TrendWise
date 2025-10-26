@@ -4,7 +4,7 @@ const articleSchema = new mongoose.Schema(
   {
     // 🔹 Basic info
     title: { type: String, required: true },
-    slug: { type: String, required: true, unique: true },
+    slug: { type: String,  unique: true },
 
     // 🔹 SEO + Meta info (as ChatGPT generates)
     meta: {
