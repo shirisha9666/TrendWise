@@ -52,135 +52,65 @@ for (const item of seoArticles) {
     console.error('createArticles error:', err);
     return res.status(500).json({ message: err.message });
   }
-};
-
-
-
- const generateSlug = (text) => {
-  // if (!text) text = "untitled";
-  let slug = text
-    .toString()
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, "-")
-    .replace(/[^\w\-]+/g, "")
-    .replace(/\-\-+/g, "-");
-
-  return slug;
-};
-
-
-// export const createAticles = async (req, res) => {
-//   const { contentType } = req.body;
-
-//   try {
-//     const trendingResults = await scrapeTrendingContent(contentType);
-//     const seoArticles = await generateSEOContentHUGGINGFACE(trendingResults);
-//     const savedArticles = [];
-
-//     for (const item of seoArticles) {
-//       let slug = generateSlug(item.originalTitle);
-//       let counter = 1;
-
-//       // Avoid duplicate slugs
-//       while (await Article.findOne({ slug })) {
-//         slug = `${generateSlug(item.originalTitle)}-${counter}`;
-//         counter++;
-//       }
-
-//       const newArticle = new Article({
-//         title: item.originalTitle,
-//         slug,
-//         meta: {
-//           title: item.originalTitle,
-//           description: item.topic,
-//           keywords: item.topic ? item.topic.split(" ") : [],
-//           ogTitle: item.originalTitle,
-//           ogDescription: item.topic,
-//           ogImage: item.mainImage || "https://source.unsplash.com/600x400/?news",
-//         },
-//         media: {
-//           images: item.images && item.images.length ? item.images : [],
-//           videos: [],
-//           articles: item.link
-//             ? [{ title: item.originalTitle, url: item.link, thumbnail: item.mainImage || (item.images[0] || null) }]
-//             : [],
-//         },
-//         content: item.content || "",
-//         source: "auto",
-//         createdByBot: true,
-//       });
-
-//       const saved = await newArticle.save();
-//       savedArticles.push(saved);
-//     }
-
-//     return res.status(200).json({
-//       message: "Articles saved successfully",
-//       savedCount: savedArticles,
-//     });
-//   } catch (error) {
-//     console.error("createArticles", error);
-//     return res.status(500).json({ message: error.message });
-//   }
-// };
-
+}
 
 
 export const updateArticles = async (req, res) => {
-  const { id } = req.params; // ✅ fixed typo
-  const { contentType } = req.body;
+  const { id } = req.params;
 
   try {
-    // Fetch trending content
-    const trendingResults = await scrapeTrendingContent(contentType);
-    const seoArticles = await generateSEOContentHUGGINGFACE(trendingResults);
-
-    const updatedArticles = [];
-
-    for (const item of seoArticles) {
-      // Update existing article by ID
-      const updated = await Article.findByIdAndUpdate(
-        id,
-        {
-          title: item.originalTitle,
-          slug: slugify(item.originalTitle, { lower: true, strict: true }),
-          meta: {
-            title: item.originalTitle,
-            description: item.topic,
-            keywords: item.topic.split(" "),
-            ogTitle: item.originalTitle,
-            ogDescription: item.topic,
-            ogImage: "https://example.com/default-image.jpg",
-          },
-          media: {
-            videos: [
-              {
-                title: item.topic,
-                url: item.link,
-              },
-            ],
-          },
-          content: item.content,
-          source: "auto",
-          createdByBot: true,
-        },
-        { new: true } // return updated document
-      );
-
-      if (updated) updatedArticles.push(updated);
+    const existingArticle = await Article.findById(id);
+    if (!existingArticle) {
+      return res.status(404).json({ message: "Article not found" });
     }
 
-    console.log("✅ Articles updated successfully:", updatedArticles.length);
+    const trendingResults = await scrapeTrendingContent();
+    const seoArticles = await generateSEOContentHUGGINGFACE(trendingResults);
+
+    if (!seoArticles.length) {
+      return res.status(404).json({ message: "No SEO articles generated" });
+    }
+
+    // Pick first SEO article (or use flexible matching)
+    const seoArticleToUpdate = seoArticles[0];
+
+    const slug = slugify(seoArticleToUpdate.originalTitle, { lower: true, strict: true }) + "-" + Date.now();
+    const updateData = {
+      title: seoArticleToUpdate.originalTitle,
+      slug,
+      meta: {
+        title: seoArticleToUpdate.originalTitle,
+        description: seoArticleToUpdate.topic || "",
+        keywords: seoArticleToUpdate.topic ? seoArticleToUpdate.topic.split(" ") : [],
+        ogTitle: seoArticleToUpdate.originalTitle,
+        ogDescription: seoArticleToUpdate.topic || "",
+        ogImage: seoArticleToUpdate.images?.[0] || seoArticleToUpdate.mainImage || "https://example.com/default-image.jpg",
+      },
+      media: {
+        images: seoArticleToUpdate.images?.length ? seoArticleToUpdate.images : seoArticleToUpdate.mainImage ? [seoArticleToUpdate.mainImage] : [],
+        videos: seoArticleToUpdate.link ? [{ title: seoArticleToUpdate.topic, url: seoArticleToUpdate.link, thumbnail: seoArticleToUpdate.mainImage }] : [],
+        articles: seoArticleToUpdate.link ? [{ title: seoArticleToUpdate.originalTitle, url: seoArticleToUpdate.link, thumbnail: seoArticleToUpdate.mainImage }] : [],
+      },
+      content: seoArticleToUpdate.content,
+      source: "auto",
+      createdByBot: true,
+    };
+
+    const updated = await Article.findByIdAndUpdate(id, updateData, { new: true });
+
     return res.status(200).json({
-      message: "Articles updated successfully",
-      updatedArticles,
+      message: "Article updated successfully",
+      updated,
     });
   } catch (error) {
-    console.error("updateArticles error:", error);
+    console.error("❌ updateArticles error:", error);
     return res.status(500).json({ message: error.message });
   }
 };
+
+
+
+
 export const DeletAticles = async (req, res) => {
   const { id } = req.params; // article id
   try {
