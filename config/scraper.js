@@ -2,29 +2,6 @@ import puppeteer from "puppeteer";
 import fetch from "node-fetch";
 import xml2js from "xml2js";
 import googleTrends from 'google-trends-api';
-import os from "os"
-
-const isWindows = os.platform() === "win32";
-const isLinux = os.platform() === "linux";
-const isRender = isLinux && (process.env.RENDER === "true" || process.env.CHROME_PATH);
-
-console.log("🖥️ Platform:", os.platform());
-console.log("🌍 RENDER:", process.env.RENDER);
-console.log("🧩 CHROME_PATH:", process.env.CHROME_PATH);
-
-const browser = await puppeteer.launch({
-  headless: true,
-  args: [
-    "--no-sandbox",
-    "--disable-setuid-sandbox",
-    "--disable-dev-shm-usage",
-    "--disable-gpu",
-  ],
-
-});
-
-console.log("✅ Puppeteer launched successfully!");
-
 
 
 
