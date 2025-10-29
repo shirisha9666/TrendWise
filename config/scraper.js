@@ -2,8 +2,39 @@ import puppeteer from "puppeteer";
 import fetch from "node-fetch";
 import xml2js from "xml2js";
 import googleTrends from 'google-trends-api';
+import os from "os"
 
-// Scrape images from an article page
+const isWindows = os.platform() === "win32";
+const isLinux = os.platform() === "linux";
+const isRender = isLinux && (process.env.RENDER === "true" || process.env.CHROME_PATH);
+
+console.log("🖥️ Platform:", os.platform());
+console.log("🌍 RENDER:", process.env.RENDER);
+console.log("🧩 CHROME_PATH:", process.env.CHROME_PATH);
+
+const browser = await puppeteer.launch({
+  headless: true,
+  args: [
+    "--no-sandbox",
+    "--disable-setuid-sandbox",
+    "--disable-dev-shm-usage",
+    "--disable-gpu",
+  ],
+  executablePath: isRender
+    ? process.env.CHROME_PATH || "/usr/bin/google-chrome-stable"
+    : undefined, // ✅ use bundled Chromium for local (Windows/Mac)
+});
+
+console.log("✅ Puppeteer launched successfully!");
+
+
+
+
+
+
+
+
+
 
 export const fetchArticleMedia = async (url, browser) => {
   try {
@@ -149,98 +180,6 @@ async function getTrendingTopics() {
     return ["Breaking News", "Latest Updates"];
   }
 }
-
-// export const scrapeTrendingContent = async (contentType = "articles", limits = { articles: 5, images: 5, videos: 5 }) => {
-//   const trendingTopics = await getTrendingTopics();
-//   const results = [];
-//   const browser = await puppeteer.launch({
-//     headless: true,
-//     args: ["--no-sandbox", "--disable-setuid-sandbox"],
-//   });
-
-//   for (const topic of trendingTopics) {
-//     try {
-//       let mediaResults = [];
-
-//       // Articles or all content
-//       if (contentType === "articles" || contentType === "all") {
-//         const rssUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(topic)}&hl=en-US&gl=US&ceid=US:en`;
-//         const xml = await (await fetch(rssUrl)).text();
-//         const parsed = await new xml2js.Parser().parseStringPromise(xml);
-//         const items = (parsed.rss.channel[0].item || []).slice(0, limits.articles); // LIMIT HERE
-
-//         for (const item of items) {
-//           const link = item.link[0];
-//           const snippet = item.description[0];
-
-//           const { mainImage, images, videos } = await fetchArticleMedia(link, browser);
-
-//           mediaResults.push({
-//             topic,
-//             title: item.title[0],
-//             link,
-//             content: snippet,
-//             mainImage,
-//             images,
-//             videos,
-//             pubDate: item.pubDate[0],
-//             source: item.source ? item.source[0]._ : null,
-//           });
-//         }
-//       }
-
-//       // Images only or all
-//       if (contentType === "images" || contentType === "all") {
-//         const { mainImage, images } = await fetchImagesForTopic(topic, browser);
-//         mediaResults.push({
-//           topic,
-//           title: topic,
-//           link: null,
-//           content: `Images for trending topic: ${topic}`,
-//           mainImage,
-//           images: images.slice(0, limits.images), // LIMIT HERE
-//           videos: [],
-//           pubDate: new Date().toISOString(),
-//           source: "auto",
-//         });
-//       }
-
-//       // Videos only or all
-//       if (contentType === "videos" || contentType === "all") {
-//         const videos = await fetchVideosForTopic(topic, browser);
-//         mediaResults.push({
-//           topic,
-//           title: topic,
-//           link: null,
-//           content: `Videos for trending topic: ${topic}`,
-//           mainImage: videos.length ? videos[0].thumbnail || null : null,
-//           images: [],
-//           videos: videos.slice(0, limits.videos), // LIMIT HERE
-//           pubDate: new Date().toISOString(),
-//           source: "auto",
-//         });
-//       }
-
-//       results.push(...mediaResults);
-//     } catch (err) {
-//       console.error("Error scraping topic:", topic, err.message);
-//       results.push({
-//         topic,
-//         title: topic,
-//         link: null,
-//         content: `Trending topic: ${topic}`,
-//         mainImage: "https://example.com/default-image.jpg",
-//         images: ["https://example.com/default-image.jpg"],
-//         videos: [],
-//         pubDate: new Date().toISOString(),
-//         source: "auto",
-//       });
-//     }
-//   }
-
-//   await browser.close();
-//   return results;
-// };
 
 
 
