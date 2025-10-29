@@ -11,6 +11,7 @@ import googleTrends from 'google-trends-api';
 
 
 
+
 export const fetchArticleMedia = async (url, browser) => {
   try {
     const page = await browser.newPage();
