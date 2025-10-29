@@ -20,9 +20,7 @@ const browser = await puppeteer.launch({
     "--disable-dev-shm-usage",
     "--disable-gpu",
   ],
-  executablePath: isRender
-    ? process.env.CHROME_PATH || "/usr/bin/google-chrome-stable"
-    : undefined, // ✅ use bundled Chromium for local (Windows/Mac)
+
 });
 
 console.log("✅ Puppeteer launched successfully!");
